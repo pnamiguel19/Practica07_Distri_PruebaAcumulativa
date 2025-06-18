@@ -9,193 +9,159 @@ namespace Cliente
 {
     public partial class FrmValidador : Form
     {
+        // Cliente TCP y flujo de red
         private TcpClient remoto;
         private NetworkStream flujo;
 
         public FrmValidador()
         {
-            InitializeComponent();
+            InitializeComponent(); // Inicializa los componentes gráficos
         }
 
+        // Evento que se ejecuta al cargar el formulario
         private void FrmValidador_Load(object sender, EventArgs e)
         {
             try
             {
-                // Establece la conexión con el servidor al cargar el formulario
+                // Intenta conectarse al servidor local en el puerto 8080
                 remoto = new TcpClient("127.0.0.1", 8080);
-                flujo = remoto.GetStream(); // Obtiene el flujo de red
+                flujo = remoto.GetStream();
             }
             catch (SocketException ex)
             {
-                MessageBox.Show("No se pudo establecer conexión " + ex.Message, "ERROR");
+                MessageBox.Show("No se pudo establecer conexión: " + ex.Message, "ERROR");
             }
 
-            // Deshabilita controles de placa y días al inicio
+            // Desactiva los controles hasta que se inicie sesión
             panPlaca.Enabled = false;
             chkLunes.Enabled = false;
             chkMartes.Enabled = false;
             chkMiercoles.Enabled = false;
             chkJueves.Enabled = false;
             chkViernes.Enabled = false;
-            chkDomingo.Enabled = false;
-            chkSabado.Enabled = false;
         }
 
+        // Evento del botón "Iniciar sesión"
         private void btnIniciar_Click(object sender, EventArgs e)
         {
-            string usuario = txtUsuario.Text;
-            string contraseña = txtPassword.Text;
+            string usuario = txtUsuario.Text.Trim();
+            string clave = txtPassword.Text.Trim();
 
-            if (usuario == "" || contraseña == "")
+            if (usuario == "" || clave == "")
             {
-                MessageBox.Show("Se requiere el ingreso de usuario y contraseña", "ADVERTENCIA");
+                MessageBox.Show("Se requiere usuario y contraseña", "ADVERTENCIA");
                 return;
             }
 
-            Pedido pedido = new Pedido
-            {
-                Comando = "INGRESO",
-                Parametros = new[] { usuario, contraseña }
-            };
+            // Envia el comando "INGRESO" al servidor con usuario y clave
+            string respuesta = Protocolo.Protocolo.HazOperacion(flujo, "INGRESO", new[] { usuario, clave });
 
-            Respuesta respuesta = HazOperacion(pedido);
             if (respuesta == null)
             {
                 MessageBox.Show("Hubo un error", "ERROR");
                 return;
             }
 
-            if (respuesta.Estado == "OK" && respuesta.Mensaje == "ACCESO_CONCEDIDO")
+            // Si el acceso es concedido, habilita el panel de consulta
+            if (respuesta.StartsWith("OK") && respuesta.Contains("ACCESO_CONCEDIDO"))
             {
-                panPlaca.Enabled = true;
                 panLogin.Enabled = false;
+                panPlaca.Enabled = true;
                 MessageBox.Show("Acceso concedido", "INFORMACIÓN");
                 txtModelo.Focus();
             }
-            else if (respuesta.Estado == "NOK" && respuesta.Mensaje == "ACCESO_NEGADO")
+            else
             {
-                panPlaca.Enabled = false;
-                panLogin.Enabled = true;
                 MessageBox.Show("No se pudo ingresar, revise credenciales", "ERROR");
                 txtUsuario.Focus();
             }
         }
 
-        private Respuesta HazOperacion(Pedido pedido)
-        {
-            if (flujo == null)
-            {
-                MessageBox.Show("No hay conexión", "ERROR");
-                return null;
-            }
-
-            try
-            {
-                // Codifica el pedido como una cadena UTF-8 y lo envía al servidor
-                byte[] bufferTx = Encoding.UTF8.GetBytes(pedido.Comando + " " + string.Join(" ", pedido.Parametros));
-                flujo.Write(bufferTx, 0, bufferTx.Length);
-
-                // Espera la respuesta del servidor
-                byte[] bufferRx = new byte[1024];
-                int bytesRx = flujo.Read(bufferRx, 0, bufferRx.Length);
-                string mensaje = Encoding.UTF8.GetString(bufferRx, 0, bytesRx);
-
-                // Procesa la respuesta
-                var partes = mensaje.Split(' ');
-                return new Respuesta
-                {
-                    Estado = partes[0],
-                    Mensaje = string.Join(" ", partes.Skip(1).ToArray())
-                };
-            }
-            catch (SocketException ex)
-            {
-                MessageBox.Show("Error al intentar transmitir " + ex.Message, "ERROR");
-            }
-
-            // No se cierra el flujo aquí para permitir múltiples operaciones
-            return null;
-        }
-
+        // Evento del botón "Consultar restricción"
         private void btnConsultar_Click(object sender, EventArgs e)
         {
-            string modelo = txtModelo.Text;
-            string marca = txtMarca.Text;
-            string placa = txtPlaca.Text;
+            string modelo = txtModelo.Text.Trim();
+            string marca = txtMarca.Text.Trim();
+            string placa = txtPlaca.Text.Trim();
 
-            Pedido pedido = new Pedido
-            {
-                Comando = "CALCULO",
-                Parametros = new[] { modelo, marca, placa }
-            };
+            // Envia el comando "CALCULO" con modelo, marca y placa
+            string respuesta = Protocolo.Protocolo.HazOperacion(flujo, "CALCULO", new[] { modelo, marca, placa });
 
-            Respuesta respuesta = HazOperacion(pedido);
             if (respuesta == null)
             {
                 MessageBox.Show("Hubo un error", "ERROR");
                 return;
             }
 
-            if (respuesta.Estado == "NOK")
+            if (respuesta.StartsWith("NOK"))
             {
-                MessageBox.Show("Error en la solicitud.", "ERROR");
-                chkLunes.Checked = false;
-                chkMartes.Checked = false;
-                chkMiercoles.Checked = false;
-                chkJueves.Checked = false;
-                chkViernes.Checked = false;
+                MessageBox.Show("Error en la solicitud", "ERROR");
+                LimpiarChecks();
+                return;
             }
-            else
-            {
-                var partes = respuesta.Mensaje.Split(' ');
-                MessageBox.Show("Se recibió: " + respuesta.Mensaje, "INFORMACIÓN");
-                byte resultado = Byte.Parse(partes[1]);
 
-                // Decodifica el resultado para marcar los días correspondientes
+            // Divide la respuesta y extrae el valor binario de los días
+            string[] partes = respuesta.Split(' ');
+            if (partes.Length < 2)
+            {
+                MessageBox.Show("Respuesta inválida", "ERROR");
+                return;
+            }
+
+            MessageBox.Show("Se recibió: " + respuesta, "INFORMACIÓN");
+
+            if (byte.TryParse(partes[1], out byte resultado))
+            {
+                // Marca los checkboxes según los bits recibidos
                 chkLunes.Checked = (resultado & 0b00100000) != 0;
                 chkMartes.Checked = (resultado & 0b00010000) != 0;
                 chkMiercoles.Checked = (resultado & 0b00001000) != 0;
                 chkJueves.Checked = (resultado & 0b00000100) != 0;
                 chkViernes.Checked = (resultado & 0b00000010) != 0;
             }
+            else
+            {
+                MessageBox.Show("No se pudo interpretar el resultado", "ERROR");
+            }
         }
 
+        // Evento del botón "Número de consultas"
         private void btnNumConsultas_Click(object sender, EventArgs e)
         {
-            string mensaje = "hola";
+            // Envia el comando "CONTADOR" al servidor
+            string respuesta = Protocolo.Protocolo.HazOperacion(flujo, "CONTADOR", new[] { "consulta" });
 
-            Pedido pedido = new Pedido
-            {
-                Comando = "CONTADOR",
-                Parametros = new[] { mensaje }
-            };
-
-            Respuesta respuesta = HazOperacion(pedido);
             if (respuesta == null)
             {
                 MessageBox.Show("Hubo un error", "ERROR");
                 return;
             }
 
-            if (respuesta.Estado == "NOK")
+            if (respuesta.StartsWith("OK"))
             {
-                MessageBox.Show("Error en la solicitud.", "ERROR");
+                MessageBox.Show("Número de solicitudes: " + respuesta.Substring(3), "INFORMACIÓN");
             }
             else
             {
-                var partes = respuesta.Mensaje.Split(' ');
-                MessageBox.Show("El número de pedidos recibidos en este cliente es " + partes[0], "INFORMACIÓN");
+                MessageBox.Show("Error al consultar número de solicitudes", "ERROR");
             }
         }
 
+        // Evento que se ejecuta al cerrar el formulario
         private void FrmValidador_FormClosing(object sender, FormClosingEventArgs e)
         {
-            // Cierra la conexión cuando el formulario se está cerrando
-            if (flujo != null)
-                flujo.Close();
+            flujo?.Close();   // Cierra el flujo si está activo
+            remoto?.Close();  // Cierra la conexión con el servidor
+        }
 
-            if (remoto != null && remoto.Connected)
-                remoto.Close();
+        // Método auxiliar para desmarcar todos los checkboxes
+        private void LimpiarChecks()
+        {
+            chkLunes.Checked = false;
+            chkMartes.Checked = false;
+            chkMiercoles.Checked = false;
+            chkJueves.Checked = false;
+            chkViernes.Checked = false;
         }
     }
 }

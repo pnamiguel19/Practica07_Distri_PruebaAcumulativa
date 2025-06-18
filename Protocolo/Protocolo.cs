@@ -1,50 +1,103 @@
-﻿using System.Linq; 
+﻿using System;
+using System.Linq;
+using System.Text;
+using System.Net.Sockets;
 
 namespace Protocolo
 {
-    // Clase que representa una solicitud o instrucción recibida (Pedido).
-    public class Pedido
+    public class Protocolo
     {
-        // Propiedad que almacena el comando principal de la solicitud.
-        public string Comando { get; set; }
-
-        // Propiedad que almacena los parámetros asociados al comando.
-        public string[] Parametros { get; set; }
-
-        // Método estático que procesa un mensaje recibido y lo convierte en un objeto Pedido.
-        public static Pedido Procesar(string mensaje)
+        // Envía un comando con parámetros por el flujo de red y recibe la respuesta.
+        public static string HazOperacion(NetworkStream flujo, string comando, string[] parametros)
         {
-            // Se divide el mensaje por espacios.
-            var partes = mensaje.Split(' ');
-
-            // Se crea un nuevo objeto Pedido con el primer elemento como comando y el resto como parámetros.
-            return new Pedido
+            try
             {
-                Comando = partes[0].ToUpper(),         // Se convierte el comando a mayúsculas.
-                Parametros = partes.Skip(1).ToArray()  // Se omite el primer elemento (el comando) y se guarda el resto como parámetros.
-            };
+                // Construye el mensaje: comando + parámetros separados por espacios
+                string textoPedido = comando + " " + string.Join(" ", parametros);
+
+                // Codifica el mensaje en bytes y lo envía al servidor
+                byte[] bufferTx = Encoding.UTF8.GetBytes(textoPedido);
+                flujo.Write(bufferTx, 0, bufferTx.Length);
+
+                // Espera la respuesta del servidor
+                byte[] bufferRx = new byte[1024];
+                int bytesRx = flujo.Read(bufferRx, 0, bufferRx.Length);
+
+                // Decodifica y retorna la respuesta
+                return Encoding.UTF8.GetString(bufferRx, 0, bytesRx);
+            }
+            catch
+            {
+                // Si ocurre un error (por ejemplo, desconexión), retorna null
+                return null;
+            }
         }
 
-        // Sobrescribe el método ToString para mostrar el comando seguido de los parámetros separados por espacio.
-        public override string ToString()
+        // Procesa un pedido recibido y retorna la respuesta correspondiente
+        public static string ResolverPedido(string pedido)
         {
-            return $"{Comando} {string.Join(" ", Parametros)}";
+            // Divide el pedido en comando y parámetros
+            string[] partes = pedido.Trim().Split(' ');
+            if (partes.Length == 0) return "NOK Comando inválido";
+
+            string comando = partes[0];
+            string[] parametros = partes.Skip(1).ToArray();
+
+            // Procesa según el tipo de comando recibido
+            switch (comando)
+            {
+                case "INGRESO":
+                    // Valida que haya al menos usuario y contraseña
+                    if (parametros.Length < 2)
+                        return "NOK Faltan parámetros";
+
+                    // Verifica credenciales
+                    return (parametros[0] == "root" && parametros[1] == "admin20")
+                        ? "OK ACCESO_CONCEDIDO"
+                        : "NOK ACCESO_DENEGADO";
+
+                case "CALCULO":
+                    // Valida que tenga al menos tres parámetros
+                    if (parametros.Length < 3)
+                        return "NOK Faltan datos";
+
+                    // Toma la placa y obtiene los días de restricción
+                    string placa = parametros[2];
+                    byte dias = ObtenerDiasRestriccion(placa);
+                    return "OK " + dias;
+
+                case "CONTADOR":
+                    // Devuelve un valor fijo (puede ser reemplazado por un contador real)
+                    return "OK 5";
+
+                default:
+                    // Si el comando no es reconocido
+                    return "NOK Comando no reconocido";
+            }
         }
-    }
 
-    // Clase que representa una respuesta a un Pedido.
-    public class Respuesta
-    {
-        // Propiedad que indica el estado de la respuesta (por ejemplo, "OK" o "ERROR").
-        public string Estado { get; set; }
-
-        // Propiedad que contiene un mensaje adicional que acompaña al estado.
-        public string Mensaje { get; set; }
-
-        // Sobrescribe el método ToString para mostrar el estado seguido del mensaje.
-        public override string ToString()
+        // Determina los días de restricción según el último dígito de la placa
+        private static byte ObtenerDiasRestriccion(string placa)
         {
-            return $"{Estado} {Mensaje}";
+            // Valida que la placa no sea nula y que termine en un dígito
+            if (string.IsNullOrEmpty(placa) || !char.IsDigit(placa[placa.Length - 1]))
+                return 0;
+
+            int digito = int.Parse(placa[placa.Length - 1].ToString());
+
+            // Asocia cada par de dígitos con un día específico
+            if (digito == 1 || digito == 2)
+                return 0b00100000; // Lunes
+            else if (digito == 3 || digito == 4)
+                return 0b00010000; // Martes
+            else if (digito == 5 || digito == 6)
+                return 0b00001000; // Miércoles
+            else if (digito == 7 || digito == 8)
+                return 0b00000100; // Jueves
+            else if (digito == 9 || digito == 0)
+                return 0b00000010; // Viernes
+            else
+                return 0;
         }
     }
 }
