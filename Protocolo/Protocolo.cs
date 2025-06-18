@@ -2,9 +2,37 @@
 using System.Linq;
 using System.Text;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 
 namespace Protocolo
 {
+    // ************************************************************************
+    // Practica 07
+    // Miguel Avilez
+    // Fecha de realización: 11/06/2025
+    // Fecha de entrega: 18/06/2025
+    // Resultados:
+    // * Se modifica el código del cliente y del servidor para que los métodos HazOperación, ResolverPedido sean implementados en la clase
+    // Protocolo. Tanto el cliente como el servidor deben usar Protocolo, ya no Pedido y Respuesta.
+    // Conclusiones:
+    // Miguel Avilez
+    // * En síntesis, esta herramienta potencia el trabajo colaborativo al permitir que los equipos trabajen de manera
+    // simultánea y ordenada sobre un mismo proyecto, sin importar su ubicación geográfica. Gracias a su sistema de ramas y
+    // fusiones, cada integrante puede desarrollar nuevas funcionalidades o corregir errores sin afectar el trabajo de los demás,
+    // asegurando así un desarrollo más seguro y estructurado.
+    // * Además, actúa como una plataforma de respaldo y de historial del proyecto, permitiendo recuperar versiones anteriores
+    // del código y entender cómo ha evolucionado.Esta trazabilidad no solo mejora la calidad del software,
+    // sino que también facilita la incorporación de nuevos miembros al equipo, quienes pueden revisar el historial de cambios y
+    // entender rápidamente el estado actual del proyecto.
+
+    // Recomendaciones:
+    // Miguel Avilez
+    // * Se debe utilizar pull requests para revisar y discutir los cambios antes de integrarlos a la rama principal, ya
+    // que esto fomenta la colaboración, mejora la calidad del código y permite detectar errores o inconsistencias a tiempo.
+    // * Se recomienda, documentar adecuadamente tu proyecto utilizando el archivo README y, si es posible, una wiki, ya que
+    // esto facilita la comprensión del objetivo, el uso y la estructura del código tanto para el equipo como para futuros colaboradores.
+
+    // ************************************************************************
     public class Protocolo
     {
         // Envía un comando con parámetros por el flujo de red y recibe la respuesta.
